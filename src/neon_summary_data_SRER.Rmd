@@ -1,0 +1,256 @@
+---
+title: "ECOL 610: NEON Data - Summary Data"
+author: "Group - Santa Rita Experimental Range (SRER)"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+linkcolor: blue
+header-includes:
+  - \usepackage{caption}
+editor_options: 
+  chunk_output_type: console
+knit: (function(inputFile, encoding){ 
+    out_dir <- '../';
+    rmarkdown::render(inputFile, encoding = encoding, output_file=file.path(dirname(inputFile), out_dir, 'ECOL610_NEONSummaryData_SRER.pdf')) 
+  })
+---
+
+# Group Members
+
+  - Emily Swartz
+  - Shahriar Shah Heydari
+  - Stephanie Cardinalli
+  - George Woolsey
+
+
+# Setup
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE
+  , warning = FALSE
+  , message = FALSE
+  , fig.height = 5
+  , fig.width = 7
+)
+```
+
+Load in the needed packages
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(viridis)
+library(RColorBrewer)
+library(scales)
+library(latex2exp)
+remove(list=ls())
+# what is your site name?
+site <- "Santa Rita Experimental Range"
+```
+
+# Load Data
+
+Information about these variables can be found in the [metadata file](https://colostate-my.sharepoint.com/:x:/g/personal/gwoolsey_colostate_edu/EUC3O5JNO8REvf7EnuAXqZ8BoA7NWmOF6FE2g_e4ycz6sg?e=oZvoRv)
+
+All daily data files can be found [here](https://colostate-my.sharepoint.com/:f:/g/personal/gwoolsey_colostate_edu/EiMajR6bLUJLvKn9fxM--GgBUrTwL9AQ_5iimFsnLovzWQ?e=DrvbYv).
+
+```{r}
+# put all of the daily data you want to load in the directory up one level titled "data"
+# load daily data
+f_list <- list.files(path = "../data/", pattern="*daily.csv")
+for (i in 1:length(f_list)){
+  nm <- stringr::word(f_list[i], start = 1, sep = "daily") %>% 
+    # stringr::str_replace_all(pattern = "[[:punct:]]", replacement = "") %>% 
+    stringr::str_replace_all(pattern = "-", replacement = "") %>% 
+    stringr::str_trim() %>% 
+    stringr::str_squish()
+  temp <- read.csv(paste0("../data/", f_list[i])) %>% 
+    dplyr::mutate(neon_site_name = nm) %>% 
+    dplyr::relocate(neon_site_name) %>% 
+    dplyr::rename_with(~ tolower(
+      gsub(" ", "_", 
+         str_trim(gsub("\\s+", " ", .x))
+      )
+    ))
+  if(i==1){
+    dta_1day <- temp
+  }else{
+    dta_1day <- dplyr::union_all(dta_1day, temp)
+  }
+  remove(temp)
+}
+# create dates and record counts
+# 1-day
+dta_1day <- dta_1day %>% 
+  dplyr::mutate(
+    date_id = lubridate::make_date(year = year, month = month, day = day)
+    , week = lubridate::week(date_id)
+    , has_gpp = ifelse(!is.na(gpp), 1, 0)
+    , season =
+        dplyr::case_when(
+          month %in% c(1:2, 11:12) ~ "Winter"
+          , month %in% c(3:5) ~ "Spring"
+          , month %in% c(6:8) ~ "Summer"
+          , month %in% c(9:10) ~ "Fall"
+          , TRUE  ~ "Other")
+  ) %>% 
+  dplyr::group_by(neon_site_name, week, year) %>% 
+  dplyr::mutate(is_full_week = sum(has_gpp)==7) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::rename(ppfd = ppfd_in)
+# count rows
+dta_1day %>% dplyr::count(neon_site_name)
+```
+
+# Assignment
+
+## Part 1
+
+One graph each with time on x-axis and each data type on the y-axis with fixed y-axis scale - turn in as a RMarkdown PDF
+
+For each variable use the following y-scales (Max, Min):
+
+* TA	(40,	-36)
+* VPD	(66,	-1)
+* PPFD_IN	(1898,	0.5)
+* SWC	(41,	2.6)
+* TS	(51,	-11)
+* NEE	(1.1,	-1)
+* GPP	(1.6,	-0.5)
+* RE	(1.2,	0)
+
+```{r}
+# in progress
+```
+
+
+## Part 2
+
+The next item will be data you fill in on this templateDownload this template
+
+Template key: sum = summer/ spring = spring/ fall = fall/ winter = winter; data types as above; metrics defined below
+
+2. Some summary data broken out by time period -> average values for season across years (e.g., average across spring 2018, 2019, 2020)
+
+For each Season and for each data type, provide the following metrics (code in template):
+
+mean value for the season (mean)
+standard deviation (sd)
+5th percentile value (5per)
+95th percentile value (95per)
+number of days included/number of observations in your mean (N)
+
+```{r}
+# list columns to summarize
+summary_vars <- c(
+  "gpp"
+  , "nee"
+  , "re"
+  , "ta"
+  , "vpd"
+  , "ppfd"
+  , "swc"
+  , "ts"
+)
+# named list of functions
+summary_fns <- list(
+  mean = ~mean(.x, na.rm = TRUE)
+  , sd = ~sd(.x, na.rm = TRUE)
+  , quantile5 = ~quantile(.x, probs = 0.05, na.rm = TRUE)
+  , quantile95 = ~quantile(.x, probs = 0.95, na.rm = TRUE)
+  , N = ~sum(ifelse(is.na(.x), 0, 1))
+)
+# can't start a var name with a number so need rename fn
+rn_fn <- function(x) paste0(gsub("quantile", "", x), "per")
+# aggregate data
+dta_summary_long <- dta_1day %>% 
+  dplyr::rename_at(summary_vars, toupper) %>% 
+  dplyr::group_by(neon_site_name, season) %>%
+  dplyr::summarise(
+    dplyr::across(
+      toupper(summary_vars)
+      , summary_fns
+      , .names = "{.col}_{.fn}"
+    )
+  ) %>%
+  dplyr::ungroup() %>% 
+  dplyr::rename_at(
+    vars(tidyselect::contains("quantile"))
+    , rn_fn
+  )
+# reshape long to wide
+dta_summary_wide <-
+  dta_summary_long %>% 
+  dplyr::mutate(season = tolower(season)) %>% 
+  tidyr::pivot_wider(
+    names_from = season
+    , values_from = -tidyselect::all_of(c("neon_site_name", "season"))
+    , names_glue = "{.value}_{season}"
+  )
+# here's a long vector of variable names so that they are in the same order as requested...yay!
+vars_order <- c("Site", "GPP_mean_sum", "GPP_mean_spring", "GPP_mean_fall", "GPP_mean_winter", "GPP_sd_sum", "GPP_sd_spring", "GPP_sd_fall", "GPP_sd_winter", "GPP_5per_sum", "GPP_5per_spring", "GPP_5per_fall", "GPP_5per_winter", "GPP_95per_sum", "GPP_95per_spring", "GPP_95per_fall", "GPP_95per_winter", "GPP_N_sum", "GPP_N_spring", "GPP_N_fall", "GPP_N_winter", "NEE_mean_sum", "NEE_mean_spring", "NEE_mean_fall", "NEE_mean_winter", "NEE_sd_sum", "NEE_sd_spring", "NEE_sd_fall", "NEE_sd_winter", "NEE_5per_sum", "NEE_5per_spring", "NEE_5per_fall", "NEE_5per_winter", "NEE_95per_sum", "NEE_95per_spring", "NEE_95per_fall", "NEE_95per_winter", "NEE_N_sum", "NEE_N_spring", "NEE_N_fall", "NEE_N_winter", "RE_mean_sum", "RE_mean_spring", "RE_mean_fall", "RE_mean_winter", "RE_sd_sum", "RE_sd_spring", "RE_sd_fall", "RE_sd_winter", "RE_5per_sum", "RE_5per_spring", "RE_5per_fall", "RE_5per_winter", "RE_95per_sum", "RE_95per_spring", "RE_95per_fall", "RE_95per_winter", "RE_N_sum", "RE_N_spring", "RE_N_fall", "RE_N_winter", "TA_mean_sum", "TA_mean_spring", "TA_mean_fall", "TA_mean_winter", "TA_sd_sum", "TA_sd_spring", "TA_sd_fall", "TA_sd_winter", "TA_5per_sum", "TA_5per_spring", "TA_5per_fall", "TA_5per_winter", "TA_95per_sum", "TA_95per_spring", "TA_95per_fall", "TA_95per_winter", "TA_N_sum", "TA_N_spring", "TA_N_fall", "TA_N_winter", "VPD_mean_sum", "VPD_mean_spring", "VPD_mean_fall", "VPD_mean_winter", "VPD_sd_sum", "VPD_sd_spring", "VPD_sd_fall", "VPD_sd_winter", "VPD_5per_sum", "VPD_5per_spring", "VPD_5per_fall", "VPD_5per_winter", "VPD_95per_sum", "VPD_95per_spring", "VPD_95per_fall", "VPD_95per_winter", "VPD_N_sum", "VPD_N_spring", "VPD_N_fall", "VPD_N_winter", "PPFD_mean_sum", "PPFD_mean_spring", "PPFD_mean_fall", "PPFD_mean_winter", "PPFD_sd_sum", "PPFD_sd_spring", "PPFD_sd_fall", "PPFD_sd_winter", "PPFD_5per_sum", "PPFD_5per_spring", "PPFD_5per_fall", "PPFD_5per_winter", "PPFD_95per_sum", "PPFD_95per_spring", "PPFD_95per_fall", "PPFD_95per_winter", "PPFD_N_sum", "PPFD_N_spring", "PPFD_N_fall", "PPFD_N_winter", "SWC_mean_sum", "SWC_mean_spring", "SWC_mean_fall", "SWC_mean_winter", "SWC_sd_sum", "SWC_sd_spring", "SWC_sd_fall", "SWC_sd_winter", "SWC_5per_sum", "SWC_5per_spring", "SWC_5per_fall", "SWC_5per_winter", "SWC_95per_sum", "SWC_95per_spring", "SWC_95per_fall", "SWC_95per_winter", "SWC_N_sum", "SWC_N_spring", "SWC_N_fall", "SWC_N_winter", "TS_mean_sum", "TS_mean_spring", "TS_mean_fall", "TS_mean_winter", "TS_sd_sum", "TS_sd_spring", "TS_sd_fall", "TS_sd_winter", "TS_5per_sum", "TS_5per_spring", "TS_5per_fall", "TS_5per_winter", "TS_95per_sum", "TS_95per_spring", "TS_95per_fall", "TS_95per_winter", "TS_N_sum", "TS_N_spring", "TS_N_fall", "TS_N_winter")
+
+# export data to csv
+dta_temp <- dta_summary_wide %>% 
+    # we can have the season names "autumn" and "winter" (both 6 letters) 
+      # but "summer" needs to be shortened to "sum" ... not to be confused with "sum" as in summation
+    dplyr::rename_at(
+      vars(tidyselect::contains("summer"))
+      , function(x) gsub("summer", "sum", x)
+    ) %>% 
+    dplyr::rename(
+      Site = neon_site_name
+    ) %>% 
+    dplyr::select(
+      tidyselect::all_of(vars_order)
+    )
+# write to csv
+write.csv(dta_temp, file = "../data/summary_data_ALL.csv", append = FALSE, row.names = FALSE)
+write.csv(
+  dta_temp %>% dplyr::filter(Site == "Santa Rita Experimental Range")
+  , file = "../data/summary_data_SRER.csv"
+  , append = FALSE
+  , row.names = FALSE
+)
+remove(dta_temp)
+```
+
+### Quick plot of season means
+
+```{r, fig.width=8, fig.height=8}
+dta_summary_long %>% 
+  dplyr::select(tidyselect::contains("mean"), neon_site_name, season) %>% 
+  tidyr::pivot_longer(
+    cols = -tidyselect::all_of(c("neon_site_name", "season"))
+    , names_to = "var_name"
+    , values_to = "var_value"
+    , values_drop_na = FALSE
+  ) %>% 
+  dplyr::mutate(
+    var_name = gsub("_mean", "", var_name)
+    , season = ordered(season, levels = c("Winter", "Spring", "Summer", "Fall"))
+  ) %>% 
+ggplot(data = ., mapping = aes(x = season, y = var_value, group = neon_site_name, color = neon_site_name)) +
+  geom_line(lwd = 1.2, alpha = 0.8) +
+  geom_point(size = 1.2, alpha = 0.8) +
+  facet_wrap(~var_name, scales = "free_y") +
+  scale_color_brewer(type = "qual", palette = "Paired") +
+  xlab("") + 
+  ylab("") +
+  labs(
+    caption = "*seasonal mean values shown"
+  ) +
+  theme_bw() +
+  theme(
+    legend.title = element_blank()
+    , legend.position = "top"
+    , axis.text.x = element_text(angle = 90)
+  ) +
+  guides(
+    color = guide_legend(override.aes = list(size = 5), nrow = 3, byrow = TRUE) 
+  )
+```
+
