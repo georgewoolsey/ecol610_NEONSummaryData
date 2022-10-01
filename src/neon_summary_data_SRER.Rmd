@@ -46,6 +46,7 @@ library(viridis)
 library(RColorBrewer)
 library(scales)
 library(latex2exp)
+library(kableExtra)
 remove(list=ls())
 # what is your site name?
 site <- "Santa Rita Experimental Range"
@@ -102,7 +103,18 @@ dta_1day <- dta_1day %>%
   dplyr::ungroup() %>% 
   dplyr::rename(ppfd = ppfd_in)
 # count rows
-dta_1day %>% dplyr::count(neon_site_name)
+dta_1day %>% dplyr::count(neon_site_name) %>% 
+  kableExtra::kable(
+    caption = "Count of daily records by NEON Site"
+    , col.names = c(
+      "Site"
+      , "N"
+      )
+  ) %>% 
+  kableExtra::kable_styling(font_size = 11) %>% 
+  kableExtra::column_spec(1, bold = TRUE, width = "18em") %>% 
+  kableExtra::kable_styling(latex_options = "HOLD_position")
+
 ```
 
 # Assignment
@@ -122,8 +134,82 @@ For each variable use the following y-scales (Max, Min):
 * GPP	(1.6,	-0.5)
 * RE	(1.2,	0)
 
-```{r}
-# in progress
+```{r, fig.height = 7, fig.width = 8, results=FALSE}
+# set up vectors to use by function
+  # vars
+  vars <- c(
+    "ta"
+    , "vpd"
+    , "ppfd"
+    , "swc"
+    , "ts"
+    , "nee"
+    , "gpp"
+    , "re"
+  )
+  vars_title <- c(
+    "Air temperature (\u00B0C)"
+    , "VPD (hPa)"
+    , latex2exp::TeX("PPFD ($\\mu mol  \\cdot  m^{-2}  \\cdot  s^{-1}$)")
+    , "Soil Water Content (%)"
+    , "Soil Temperature (\u00B0C)"
+    , latex2exp::TeX("NEE $( mol \\; CO_{2} \\cdot m^{-2} \\cdot day^{-1})$")
+    , latex2exp::TeX("GPP $( mol \\; CO_{2} \\cdot m^{-2} \\cdot day^{-1})$")
+    , latex2exp::TeX("$R_E \\;( mol \\; CO_{2} \\cdot m^{-2} \\cdot day^{-1})$")
+  )
+  var_y_min <- c(
+    -36
+    , -1
+    , 0.5
+    , 2.6
+    , -11
+    , -1
+    , -0.5
+    , 0
+  )
+  var_y_max <- c(
+    40
+    , 66
+    , 1898
+    , 41
+    , 51
+    , 1.1
+    , 1.6
+    , 1.2
+  )
+my_site <- "Santa Rita Experimental Range"
+# define plot function
+  p_fn <- function(my_var) {
+  #plot
+  (
+    dta_1day %>% 
+    dplyr::filter(
+      neon_site_name == my_site
+    ) %>% 
+    ggplot(., aes_string(x = "date_id", y = my_var)) +
+      geom_line(
+        lwd = 1.1
+        , alpha = 0.8
+        , color = RColorBrewer::brewer.pal(name = "Dark2", n = length(vars))[which(vars==my_var)]
+      ) +
+      xlab("Date") + 
+      ylab(vars_title[which(vars == my_var)]) +
+      labs(
+        title = vars_title[which(vars == my_var)]
+      ) +
+      scale_y_continuous(limits = c(var_y_min[which(vars == my_var)], var_y_max[which(vars == my_var)])) +
+      scale_x_date(date_breaks = "2 month", date_labels = "%Y-%m") + 
+      theme_bw() +
+      theme(
+        legend.position = "none"
+        , axis.text.x = element_text(angle = 60, hjust=1)
+      )
+  )
+  
+}
+# call function
+vars %>% 
+  purrr::map(p_fn) 
 ```
 
 
